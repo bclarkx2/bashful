@@ -19,6 +19,14 @@ register_opt() {
   STORE["${name}"]="${store}"
 }
 
+register_opt_value() {
+  local -r name="$1"
+  local -n attr="$2"
+  local -r val="$3"
+
+  attr["${name}"]="${val}"
+}
+
 missing_args() {
   local -r _name="$1"
   local -r _req="$2"
@@ -98,8 +106,13 @@ declare -A STORE
 
 #              name            opts             num_args      required      default    store
 register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
-register_opt   'FLAG_ARG'      '-a|--arg'       1             'true'        ''         ''
 register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
+
+register_opt_value 'FLAG_ARG' OPTS      '-a|--arg'
+register_opt_value 'FLAG_ARG' NUM_ARGS  1
+register_opt_value 'FLAG_ARG' REQUIRED  'true'
+register_opt_value 'FLAG_ARG' DEFAULTS  ''
+register_opt_value 'FLAG_ARG' STORE     'true'
 
 
 # Positional arguments
