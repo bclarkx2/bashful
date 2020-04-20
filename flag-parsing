@@ -1,0 +1,155 @@
+#!/bin/bash
+
+## Flag parsing
+
+# Helpers
+register_opt() {
+  local -r name="$1"
+  local -r opts="$2"
+  local -r num_args="$3"
+  local -r required="$4"
+  local -r default="$5"
+  local -r store="$6"
+
+  OPTS["${name}"]="${opts}"
+  VALUES["${name}"]=''
+  NUM_ARGS["${name}"]="${num_args}"
+  REQUIRED["${name}"]="${required}"
+  DEFAULTS["${name}"]="${default}"
+  STORE["${name}"]="${store}"
+}
+
+missing_args() {
+  local -r _name="$1"
+  local -r _req="$2"
+  local -r _prov="$3"
+  printf '%s\n%s\n' \
+    "Error: '${_name}' has required arguments: ${_req}" \
+    "Provided: ${_prov}" \
+    >&2
+}
+
+missing_required() {
+  local -r _name="$1"
+  printf '%s\n' "Error: missing required option: ${_name}" >&2
+}
+
+consume_flag() {
+  local -r name="$1" ; shift 2
+  
+  local num_args="${NUM_ARGS[${name}]}"
+
+  local -a args=()
+
+  if (( num_args == 0 )); then
+    args+=("${STORE[${name}]}")
+  fi
+  
+  while (( "$num_args" )); do
+    local arg="$1" ; shift 1
+
+    if [[ -z "${arg}" ]]; then
+      missing_args "${OPTS[${name}]}" "${NUM_ARGS[$name]}" "${args[*]}"
+      return 1
+    fi
+
+    for flag in "${OPTS[@]}"; do
+      if [[ "${arg}" =~ ${flag} ]]; then
+        missing_args "${OPTS[${name}]}" "${NUM_ARGS[$name]}" "${args[*]}"
+        return 1
+      fi
+    done
+
+    args+=("${arg}")
+    (( num_args-- ))
+  done
+
+  VALUES["${name}"]="${args[@]}"
+}
+
+validate_opts() {
+  # Required
+  for flag in "${!REQUIRED[@]}"; do
+    local required="${REQUIRED[${flag}]}"
+    local value="${VALUES[${flag}]}"
+    if [[ "${required}" == 'true' && -z "${value}" ]]; then
+      missing_required "${OPTS[${flag}]}"
+      return 1
+    fi
+  done
+
+  # Defaults
+  for flag in "${!VALUES[@]}"; do
+    local value="${VALUES[${flag}]}"
+    local default="${DEFAULTS[${flag}]}"
+    if [[ -z "${value}" ]]; then
+      VALUES["${flag}"]="${default}"
+    fi
+  done
+}
+
+# Option arguments
+declare -A OPTS
+declare -A VALUES
+declare -A NUM_ARGS
+declare -A REQUIRED
+declare -A DEFAULTS
+declare -A STORE
+
+#              name            opts             num_args      required      default    store
+register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
+register_opt   'FLAG_ARG'      '-a|--arg'       1             'true'        ''         ''
+register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
+
+
+# Positional arguments
+declare -a PARAMS=()
+
+while (( "$#" )); do
+  case "$1" in
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -f|--flag)
+      consume_flag 'FLAG' "$@"
+      (( $? != 0)) && exit 1
+      shift 1
+      ;;
+    -a|--arg)
+      consume_flag 'FLAG_ARG' "$@"
+      (( $? != 0 )) && exit 1
+      shift 2
+      ;;
+    -d|--default)
+      consume_flag 'DEFAULT_FLAG' "$@"
+      (( $? != 0 )) && exit 1
+      shift 1
+      ;;
+    --) # End argument parsing
+      shift
+      break
+      ;;
+    -*|--*=) # unsupported flags
+      echo "Error: Unsupported flag $1" >&2
+      exit 1
+      ;;
+    *) # preserve positional arguments
+      PARAMS+=("$1")
+      shift
+      ;;
+  esac
+done
+
+validate_opts
+(( $? != 0 )) && exit 1
+
+echo
+echo "Options:"
+for flag in "${!VALUES[@]}"; do
+  printf '[%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
+done
+
+echo
+echo "Positional:"
+printf '%s\n' "${PARAMS[@]}"
