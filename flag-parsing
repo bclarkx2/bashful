@@ -200,3 +200,4 @@ done
 
 echo
 echo "Positional:"
+printf '%s\n' "${PARAMS[@]}"
