@@ -6,8 +6,8 @@
 register_opt() {
   local -r name="$1"
   local -r opts="$2"
-  local -r num_args="$3"
-  local -r required="$4"
+  local -r num_args="${3:-0}"
+  local -r required="${4:-false}"
   local -r default="$5"
   local -r store="$6"
 
@@ -17,6 +17,7 @@ register_opt() {
   REQUIRED["${name}"]="${required}"
   DEFAULTS["${name}"]="${default}"
   STORE["${name}"]="${store}"
+  COUNTS["${name}"]=0
 }
 
 register_opt_value() {
@@ -40,6 +41,17 @@ missing_args() {
 missing_required() {
   local -r _name="$1"
   printf '%s\n' "Error: missing required option: ${_name}" >&2
+}
+
+too_many_instances() {
+  local -r _name="$1"
+  local -r _count="$2"
+  local -r _max="$3"
+  printf '%s\n%s\n%s\n' \
+    "Error: '${_name}' has too many instances." \
+    "Given: ${_count}" \
+    "Max: ${_max}" \
+    >&2
 }
 
 consume_flag() {
@@ -73,6 +85,7 @@ consume_flag() {
   done
 
   VALUES["${name}"]="${args[@]}"
+  (( COUNTS["${name}"] += 1 ))
 }
 
 validate_opts() {
@@ -82,6 +95,16 @@ validate_opts() {
     local value="${VALUES[${flag}]}"
     if [[ "${required}" == 'true' && -z "${value}" ]]; then
       missing_required "${OPTS[${flag}]}"
+      return 1
+    fi
+  done
+
+  # Instances
+  for flag in "${!INSTANCES[@]}"; do
+    local max_instances="${INSTANCES[${flag}]}"
+    local count="${COUNTS[${flag}]}"
+    if (( count > max_instances )); then
+      too_many_instances "${OPTS[${flag}]}" "${count}" "${max_instances}"
       return 1
     fi
   done
@@ -98,11 +121,14 @@ validate_opts() {
 
 # Option arguments
 declare -A OPTS
-declare -A VALUES
 declare -A NUM_ARGS
 declare -A REQUIRED
 declare -A DEFAULTS
 declare -A STORE
+declare -A INSTANCES
+
+declare -A VALUES
+declare -A COUNTS
 
 #              name            opts             num_args      required      default    store
 register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
@@ -111,9 +137,14 @@ register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEF
 register_opt_value 'FLAG_ARG' OPTS      '-a|--arg'
 register_opt_value 'FLAG_ARG' NUM_ARGS  1
 register_opt_value 'FLAG_ARG' REQUIRED  'true'
-register_opt_value 'FLAG_ARG' DEFAULTS  ''
-register_opt_value 'FLAG_ARG' STORE     'true'
 
+register_opt 'SINGLE_FLAG' '-s|--single'
+register_opt_value 'SINGLE_FLAG' STORE      'SET'
+register_opt_value 'SINGLE_FLAG' INSTANCES  1
+
+register_opt 'MULTI_ARG' '-m|--multi'
+register_opt_value 'MULTI_ARG' NUM_ARGS   1
+register_opt_value 'MULTI_ARG' INSTANCES  2
 
 # Positional arguments
 declare -a PARAMS=()
@@ -125,19 +156,24 @@ while (( "$#" )); do
       exit 0
       ;;
     -f|--flag)
-      consume_flag 'FLAG' "$@"
-      (( $? != 0)) && exit 1
+      consume_flag 'FLAG' "$@" || exit 1
       shift 1
       ;;
     -a|--arg)
-      consume_flag 'FLAG_ARG' "$@"
-      (( $? != 0 )) && exit 1
+      consume_flag 'FLAG_ARG' "$@" || exit 1
       shift 2
       ;;
     -d|--default)
-      consume_flag 'DEFAULT_FLAG' "$@"
-      (( $? != 0 )) && exit 1
+      consume_flag 'DEFAULT_FLAG' "$@" || exit 1
       shift 1
+      ;;
+    -s|--single)
+      consume_flag 'SINGLE_FLAG' "$@" || exit 1
+      shift 1
+      ;;
+    -m|--multi)
+      consume_flag 'MULTI_ARG' "$@" || exit 1
+      shift 2
       ;;
     --) # End argument parsing
       shift
@@ -154,8 +190,7 @@ while (( "$#" )); do
   esac
 done
 
-validate_opts
-(( $? != 0 )) && exit 1
+validate_opts || exit 1
 
 echo
 echo "Options:"
@@ -165,4 +200,3 @@ done
 
 echo
 echo "Positional:"
-printf '%s\n' "${PARAMS[@]}"
