@@ -1,5 +1,13 @@
 #!/bin/bash
 
+debug() {
+  local -n arr="$1"
+  printf '\n%s\n' "DEBUG: ${!arr}"
+  for flag in "${!arr[@]}"; do
+    printf ' [%s]=%s\n' "${flag}" "${arr[${flag}]}"
+  done
+}
+
 ## Flag parsing
 
 # Helpers
@@ -10,13 +18,16 @@ register_opt() {
   local -r required="${4:-false}"
   local -r default="$5"
   local -r store="$6"
+  local -r instances="${7:-1}"
 
   OPTS["${name}"]="${opts}"
-  VALUES["${name}"]=''
   NUM_ARGS["${name}"]="${num_args}"
   REQUIRED["${name}"]="${required}"
   DEFAULTS["${name}"]="${default}"
   STORE["${name}"]="${store}"
+  INSTANCES["${name}"]="${instances}"
+
+  VALUES["${name}"]=''
   COUNTS["${name}"]=0
 }
 
@@ -134,7 +145,7 @@ declare -A COUNTS
 register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
 register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
 
-register_opt_value 'FLAG_ARG' OPTS      '-a|--arg'
+register_opt 'FLAG_ARG' '-a|--arg'
 register_opt_value 'FLAG_ARG' NUM_ARGS  1
 register_opt_value 'FLAG_ARG' REQUIRED  'true'
 
