@@ -21,7 +21,7 @@ register_opt() {
   local -r instances="${7:-1}"
 
   OPTS["${name}"]="${opts}"
-  NUM_ARGS["${name}"]="${num_args}"
+  NUM_OPT_ARGS["${name}"]="${num_args}"
   REQUIRED["${name}"]="${required}"
   DEFAULTS["${name}"]="${default}"
   STORE["${name}"]="${store}"
@@ -37,6 +37,18 @@ register_opt_value() {
   local -r val="$3"
 
   attr["${name}"]="${val}"
+}
+
+register_pos() {
+  local -r name="$1"
+  local -r num_args="${2:-0}"
+  local -r required="${3:-'true'}"
+
+  NUM_POS_ARGS["${name}"]="${num_args}"
+  POS_REQUIRED["${name}"]="${required}"
+  POS_ORDER+=("${name}")
+
+  POS_PARSED["${name}"]=''
 }
 
 
@@ -67,12 +79,31 @@ too_many_instances() {
     >&2
 }
 
+missing_pos_args() {
+  local -r _name="$1"
+  local -r _num="$2"
+  local -r _actual="$3"
+  printf '%s\n%s\n%s\n' \
+    "Error: '${_name}' is missing positional arguments." \
+    "Given: ${_actual}" \
+    "Required: ${_num}" \
+    >&2
+}
 
-# Processing & validation
+too_many_pos_args() {
+  printf 'Error: too many positional arguments provided\n' >&2
+}
+
+missing_required_pos() {
+  local -r _name="$1"
+  printf '%s\n' "Error: missing required positional argument '${_name}'" >&2
+}
+
+# Processing
 consume_flag() {
   local -r name="$1" ; shift 2
   
-  local num_args="${NUM_ARGS[${name}]}"
+  local num_args="${NUM_OPT_ARGS[${name}]}"
 
   local -a args=()
 
@@ -84,13 +115,13 @@ consume_flag() {
     local arg="$1" ; shift 1
 
     if [[ -z "${arg}" ]]; then
-      missing_args "${OPTS[${name}]}" "${NUM_ARGS[$name]}" "${args[*]}"
+      missing_args "${OPTS[${name}]}" "${NUM_OPT_ARGS[$name]}" "${args[*]}"
       return 1
     fi
 
     for flag in "${OPTS[@]}"; do
       if [[ "${arg}" =~ ${flag} ]]; then
-        missing_args "${OPTS[${name}]}" "${NUM_ARGS[$name]}" "${args[*]}"
+        missing_args "${OPTS[${name}]}" "${NUM_OPT_ARGS[$name]}" "${args[*]}"
         return 1
       fi
     done
@@ -103,6 +134,39 @@ consume_flag() {
   (( COUNTS["${name}"] += 1 ))
 }
 
+consume_pos() {
+  for pos in "${POS_ORDER[@]}"; do
+    local num_pos_args="${NUM_POS_ARGS[${pos}]}"
+
+    local params=()
+    while (( num_pos_args != 0 && $# )); do
+      params+=("$1")
+      shift 1
+      (( num_pos_args-- ))
+    done
+
+    if (( num_pos_args > 0 )); then
+      missing_pos_args "${pos}" "${num_pos_args}" "${params[*]}"
+      return 1
+    fi
+
+    POS_PARSED["${pos}"]="${params[*]}"
+
+    local required="${POS_REQUIRED[${pos}]}"
+    if [[ "${required}" == 'true' && -z "${POS_PARSED[${pos}]}" ]]; then
+      missing_required_pos "${pos}"
+      return 1
+    fi
+  done
+
+  if (( $# )); then
+    too_many_pos_args
+    return 1
+  fi
+}
+
+
+# Validation
 validate_opts() {
   # Required
   for flag in "${!REQUIRED[@]}"; do
@@ -136,7 +200,7 @@ validate_opts() {
 
 # Option arguments
 declare -A OPTS
-declare -A NUM_ARGS
+declare -A NUM_OPT_ARGS
 declare -A REQUIRED
 declare -A DEFAULTS
 declare -A STORE
@@ -150,7 +214,7 @@ register_opt   'FLAG'          '-f|--flag'      0             'false'       'fal
 register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
 
 register_opt 'FLAG_ARG' '-a|--arg'
-register_opt_value 'FLAG_ARG' NUM_ARGS  1
+register_opt_value 'FLAG_ARG' NUM_OPT_ARGS  1
 register_opt_value 'FLAG_ARG' REQUIRED  'true'
 
 register_opt 'SINGLE_FLAG' '-s|--single'
@@ -158,13 +222,21 @@ register_opt_value 'SINGLE_FLAG' STORE      'SET'
 register_opt_value 'SINGLE_FLAG' INSTANCES  1
 
 register_opt 'MULTI_ARG' '-m|--multi'
-register_opt_value 'MULTI_ARG' NUM_ARGS   1
+register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
 register_opt_value 'MULTI_ARG' INSTANCES  2
 
 # Positional arguments
-declare -A NUM_POS
+declare -A NUM_POS_ARGS
+declare -A POS_REQUIRED
+declare -a POS_ORDER
 
-declare -A POSITIONAL
+declare -a POS_RAW
+declare -A POS_PARSED
+
+#             name                num_args      required
+register_pos  'SINGLE_POS'        1             'true'
+register_pos  'MULTI_POS'         2             'true'
+register_pos  'INF_POS'           -1            'true'
 
 while (( "$#" )); do
   case "$1" in
@@ -194,7 +266,7 @@ while (( "$#" )); do
       ;;
     --) # End argument parsing
       shift
-      PARAMS+=("$@")
+      POS_RAW+=("$@")
       break
       ;;
     -*|--*=) # unsupported flags
@@ -202,20 +274,24 @@ while (( "$#" )); do
       exit 1
       ;;
     *) # preserve positional arguments
-      PARAMS+=("$1")
+      POS_RAW+=("$1")
       shift
       ;;
   esac
 done
+
+consume_pos "${POS_RAW[@]}" || exit 1
 
 validate_opts || exit 1
 
 echo
 echo "Options:"
 for flag in "${!VALUES[@]}"; do
-  printf '[%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
+  printf ' [%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
 done
 
 echo
 echo "Positional:"
-printf '%s\n' "${PARAMS[@]}"
+for pos in "${!POS_PARSED[@]}"; do
+  printf ' %s: %s\n' "${pos}" "${POS_PARSED[${pos}]}"
+done
