@@ -8,6 +8,20 @@ debug() {
   done
 }
 
+print_all() {
+  echo
+  echo "Options:"
+  for flag in "${!VALUES[@]}"; do
+    printf ' [%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
+  done
+  
+  echo
+  echo "Positional:"
+  for pos in "${!POS_PARSED[@]}"; do
+    printf ' %s: %s\n' "${pos}" "${POS_PARSED[${pos}]}"
+  done
+}
+
 ## Flag parsing
 
 # Registration
@@ -198,6 +212,49 @@ validate_opts() {
   done
 }
 
+# Main
+parse() {
+  local -a POS_RAW
+  
+  while (( "$#" )); do 
+    # Registered options
+    for flag in "${!OPTS[@]}"; do
+      local opts="${OPTS[${flag}]}"
+      local num_args="${NUM_OPT_ARGS[${flag}]}"
+  
+      if [[ "$1" =~ $opts ]]; then
+        consume_flag "${flag}" "$@" || return 1
+        shift $(( num_args + 1 ))
+        continue 2
+      fi
+    done
+    
+    # Default options
+    case "$1" in
+      -h|--help)
+        usage
+        exit 0
+        ;;
+      --) # End argument parsing
+        shift
+        POS_RAW+=("$@")
+        break
+        ;;
+      -*|--*=) # unsupported flags
+        echo "Error: Unsupported flag $1" >&2
+        return 1
+        ;;
+      *) # preserve positional arguments
+        POS_RAW+=("$1")
+        shift
+        ;;
+    esac
+  done
+  
+  consume_pos "${POS_RAW[@]}" || return 1
+  validate_opts || return 1
+}
+
 # Option arguments
 declare -A OPTS
 declare -A NUM_OPT_ARGS
@@ -225,12 +282,12 @@ register_opt 'MULTI_ARG' '-m|--multi'
 register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
 register_opt_value 'MULTI_ARG' INSTANCES  2
 
+
 # Positional arguments
 declare -A NUM_POS_ARGS
 declare -A POS_REQUIRED
 declare -a POS_ORDER
 
-declare -a POS_RAW
 declare -A POS_PARSED
 
 #             name                num_args      required
@@ -238,60 +295,6 @@ register_pos  'SINGLE_POS'        1             'true'
 register_pos  'MULTI_POS'         2             'true'
 register_pos  'INF_POS'           -1            'true'
 
-while (( "$#" )); do
-  case "$1" in
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    -f|--flag)
-      consume_flag 'FLAG' "$@" || exit 1
-      shift 1
-      ;;
-    -a|--arg)
-      consume_flag 'FLAG_ARG' "$@" || exit 1
-      shift 2
-      ;;
-    -d|--default)
-      consume_flag 'DEFAULT_FLAG' "$@" || exit 1
-      shift 1
-      ;;
-    -s|--single)
-      consume_flag 'SINGLE_FLAG' "$@" || exit 1
-      shift 1
-      ;;
-    -m|--multi)
-      consume_flag 'MULTI_ARG' "$@" || exit 1
-      shift 2
-      ;;
-    --) # End argument parsing
-      shift
-      POS_RAW+=("$@")
-      break
-      ;;
-    -*|--*=) # unsupported flags
-      echo "Error: Unsupported flag $1" >&2
-      exit 1
-      ;;
-    *) # preserve positional arguments
-      POS_RAW+=("$1")
-      shift
-      ;;
-  esac
-done
+parse "$@" || exit 1
+print_all
 
-consume_pos "${POS_RAW[@]}" || exit 1
-
-validate_opts || exit 1
-
-echo
-echo "Options:"
-for flag in "${!VALUES[@]}"; do
-  printf ' [%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
-done
-
-echo
-echo "Positional:"
-for pos in "${!POS_PARSED[@]}"; do
-  printf ' %s: %s\n' "${pos}" "${POS_PARSED[${pos}]}"
-done
