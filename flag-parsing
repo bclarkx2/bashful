@@ -51,9 +51,11 @@ register_pos() {
   local -r name="$1"
   local -r num_args="${2:-0}"
   local -r required="${3:-'true'}"
+  local -r default="${4}"
 
   NUM_POS_ARGS["${name}"]="${num_args}"
   REQUIRED["${name}"]="${required}"
+  DEFAULTS["${name}"]="${default}"
   POS_ORDER+=("${name}")
 
   ARG_VALUES["${name}"]=''
@@ -206,6 +208,7 @@ validate_opts() {
   done
 }
 
+
 # Main
 parse() {
   local -a POS_RAW
@@ -279,10 +282,10 @@ register_opt 'MULTI_ARG' '-m|--multi'
 register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
 register_opt_value 'MULTI_ARG' INSTANCES  2
 
-#             name                num_args      required
-register_pos  'SINGLE_POS'        1             'true'
-register_pos  'MULTI_POS'         2             'true'
-register_pos  'INF_POS'           -1            'true'
+#             name                num_args      required    default
+register_pos  'SINGLE_POS'        1             'true'      ''
+register_pos  'MULTI_POS'         2             'true'      ''
+register_pos  'INF_POS'           -1            'false'     'abc'
 
 parse "$@" || exit 1
 print_all
