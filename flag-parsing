@@ -16,6 +16,12 @@ print_all() {
   done
 }
 
+# post-parse
+print_arg() {
+  printf '%s\n%s\n' 'Printing an arg!' "$@"
+}
+
+
 ## Flag parsing
 
 # Registration
@@ -209,6 +215,18 @@ validate_opts() {
 }
 
 
+# Post parse
+post_parse() {
+  # Post parse funcs
+  for flag in "${!POST_PARSE[@]}"; do
+    local callback="${POST_PARSE[${flag}]}"
+    local opts="${OPTS[${flag}]:-'--'}"
+    local val="${ARG_VALUES[${flag}]}"
+    "${callback}" "${flag}" "${opts}" "${val}"
+  done
+}
+
+
 # Main
 parse() {
   local -a POS_RAW
@@ -250,6 +268,7 @@ parse() {
   
   consume_pos "${POS_RAW[@]}" || return 1
   validate_opts || return 1
+  post_parse
 }
 
 # Option arguments
@@ -260,6 +279,7 @@ declare -A REQUIRED
 declare -A DEFAULTS
 declare -A STORE
 declare -A INSTANCES
+declare -A POST_PARSE
 declare -a POS_ORDER
 
 declare -A ARG_VALUES
@@ -272,15 +292,17 @@ register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEF
 
 register_opt 'FLAG_ARG' '-a|--arg'
 register_opt_value 'FLAG_ARG' NUM_OPT_ARGS  1
-register_opt_value 'FLAG_ARG' REQUIRED  'true'
+register_opt_value 'FLAG_ARG' REQUIRED      'true'
+register_opt_value 'FLAG_ARG' POST_PARSE    'print_arg'
 
 register_opt 'SINGLE_FLAG' '-s|--single'
 register_opt_value 'SINGLE_FLAG' STORE      'SET'
 register_opt_value 'SINGLE_FLAG' INSTANCES  1
+register_opt_value 'SINGLE_FLAG' POST_PARSE 'print_arg'
 
 register_opt 'MULTI_ARG' '-m|--multi'
 register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
-register_opt_value 'MULTI_ARG' INSTANCES  2
+register_opt_value 'MULTI_ARG' INSTANCES    2
 
 #             name                num_args      required    default
 register_pos  'SINGLE_POS'        1             'true'      ''
