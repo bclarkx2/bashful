@@ -24,50 +24,6 @@ print_arg() {
 
 ## Flag parsing
 
-# Registration
-register_opt() {
-  local -r name="$1"
-  local -r opts="$2"
-  local -r num_args="${3:-0}"
-  local -r required="${4:-false}"
-  local -r default="$5"
-  local -r store="$6"
-  local -r instances="${7:-1}"
-
-  OPTS["${name}"]="${opts}"
-  NUM_OPT_ARGS["${name}"]="${num_args}"
-  REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
-  STORE["${name}"]="${store}"
-  INSTANCES["${name}"]="${instances}"
-
-  ARG_VALUES["${name}"]=''
-  OPT_COUNTS["${name}"]=0
-}
-
-register_opt_value() {
-  local -r name="$1"
-  local -n attr="$2"
-  local -r val="$3"
-
-  attr["${name}"]="${val}"
-}
-
-register_pos() {
-  local -r name="$1"
-  local -r num_args="${2:-0}"
-  local -r required="${3:-'true'}"
-  local -r default="${4}"
-
-  NUM_POS_ARGS["${name}"]="${num_args}"
-  REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
-  POS_ORDER+=("${name}")
-
-  ARG_VALUES["${name}"]=''
-}
-
-
 # Err messages
 missing_args() {
   local -r _name="$1"
@@ -115,6 +71,58 @@ missing_required_pos() {
   printf '%s\n' "Error: missing required positional argument '${_name}'" >&2
 }
 
+unsupported_action() {
+  local -r _name="$1"
+  local -r _action="$2"
+  printf '%s\n' "Error: '${_name}' was called with an unsupported action: ${_action}" >&2
+}
+
+# Registration
+register_opt() {
+  local -r name="$1"
+  local -r opts="$2"
+  local -r num_args="${3:-0}"
+  local -r required="${4:-false}"
+  local -r default="$5"
+  local -r store="$6"
+  local -r instances="${7:-0}"
+  local -r action="${8:-store}"
+
+  OPTS["${name}"]="${opts}"
+  NUM_OPT_ARGS["${name}"]="${num_args}"
+  REQUIRED["${name}"]="${required}"
+  DEFAULTS["${name}"]="${default}"
+  STORE["${name}"]="${store}"
+  INSTANCES["${name}"]="${instances}"
+  ACTIONS["${name}"]="${action}"
+
+  ARG_VALUES["${name}"]=''
+  OPT_COUNTS["${name}"]=0
+}
+
+register_opt_value() {
+  local -r name="$1"
+  local -n attr="$2"
+  local -r val="$3"
+
+  attr["${name}"]="${val}"
+}
+
+register_pos() {
+  local -r name="$1"
+  local -r num_args="${2:-0}"
+  local -r required="${3:-'true'}"
+  local -r default="${4}"
+
+  NUM_POS_ARGS["${name}"]="${num_args}"
+  REQUIRED["${name}"]="${required}"
+  DEFAULTS["${name}"]="${default}"
+  POS_ORDER+=("${name}")
+
+  ARG_VALUES["${name}"]=''
+}
+
+
 # Processing
 consume_flag() {
   local -r name="$1" ; shift 2
@@ -146,7 +154,22 @@ consume_flag() {
     (( num_args-- ))
   done
 
-  ARG_VALUES["${name}"]="${args[@]}"
+  local -r action="${ACTIONS[${name}]}"
+  case "${action}" in
+    store)
+      ARG_VALUES["${name}"]="${args[@]}"
+      ;;
+    list)
+      ARG_VALUES["${name}"]="${ARG_VALUES[${name}]} ${args[@]}"
+      ;;
+    increment)
+      (( ARG_VALUES["${name}"] += "${args[0]}" ))
+      ;;
+    *)
+      unsupported_action "${name}" "${action}"
+      ;;
+  esac
+
   (( OPT_COUNTS["${name}"] += 1 ))
 }
 
@@ -198,7 +221,7 @@ validate_opts() {
   for flag in "${!INSTANCES[@]}"; do
     local max_instances="${INSTANCES[${flag}]}"
     local count="${OPT_COUNTS[${flag}]}"
-    if (( count > max_instances )); then
+    if (( max_instances > 0 && count > max_instances )); then
       too_many_instances "${OPTS[${flag}]}" "${count}" "${max_instances}"
       return 1
     fi
@@ -236,8 +259,9 @@ parse() {
     for flag in "${!OPTS[@]}"; do
       local opts="${OPTS[${flag}]}"
       local num_args="${NUM_OPT_ARGS[${flag}]}"
-  
-      if [[ "$1" =~ $opts ]]; then
+ 
+      local regex="^(${opts})$"
+      if [[ "$1" =~ $regex ]]; then
         consume_flag "${flag}" "$@" || return 1
         shift $(( num_args + 1 ))
         continue 2
@@ -277,6 +301,7 @@ declare -A NUM_OPT_ARGS
 declare -A NUM_POS_ARGS
 declare -A REQUIRED
 declare -A DEFAULTS
+declare -A ACTIONS
 declare -A STORE
 declare -A INSTANCES
 declare -A POST_PARSE
@@ -287,8 +312,11 @@ declare -A OPT_COUNTS
 
 
 #              name            opts             num_args      required      default    store
-register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
 register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
+
+register_opt 'FLAG' '-f|--flag'
+register_opt_value 'FLAG' DEFAULT   'false'
+register_opt_value 'FLAG' STORE     'true'
 
 register_opt 'FLAG_ARG' '-a|--arg'
 register_opt_value 'FLAG_ARG' NUM_OPT_ARGS  1
@@ -303,6 +331,19 @@ register_opt_value 'SINGLE_FLAG' POST_PARSE 'print_arg'
 register_opt 'MULTI_ARG' '-m|--multi'
 register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
 register_opt_value 'MULTI_ARG' INSTANCES    2
+
+register_opt 'LIST_ARG' '-l|--list'
+register_opt_value 'LIST_ARG' NUM_OPT_ARGS  1
+register_opt_value 'LIST_ARG' ACTIONS       'list'
+
+register_opt 'STORE_LIST' '-sl|--store-list'
+register_opt_value 'STORE_LIST' ACTIONS     'list'
+register_opt_value 'STORE_LIST' STORE       'VAL'
+
+register_opt 'INC_ARG' '-i|--i'
+register_opt_value 'INC_ARG' ACTIONS        'increment'
+register_opt_value 'INC_ARG' STORE          2
+register_opt_value 'INC_ARG' INSTANCES      3
 
 #             name                num_args      required    default
 register_pos  'SINGLE_POS'        1             'true'      ''
