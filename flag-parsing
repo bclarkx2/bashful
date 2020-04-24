@@ -10,15 +10,9 @@ debug() {
 
 print_all() {
   echo
-  echo "Options:"
-  for flag in "${!VALUES[@]}"; do
-    printf ' [%s]=%s\n' "${flag}" "${VALUES[${flag}]}"
-  done
-  
-  echo
-  echo "Positional:"
-  for pos in "${!POS_PARSED[@]}"; do
-    printf ' %s: %s\n' "${pos}" "${POS_PARSED[${pos}]}"
+  echo "Args:"
+  for flag in "${!ARG_VALUES[@]}"; do
+    printf ' [%s]=%s\n' "${flag}" "${ARG_VALUES[${flag}]}"
   done
 }
 
@@ -41,8 +35,8 @@ register_opt() {
   STORE["${name}"]="${store}"
   INSTANCES["${name}"]="${instances}"
 
-  VALUES["${name}"]=''
-  COUNTS["${name}"]=0
+  ARG_VALUES["${name}"]=''
+  OPT_COUNTS["${name}"]=0
 }
 
 register_opt_value() {
@@ -59,10 +53,10 @@ register_pos() {
   local -r required="${3:-'true'}"
 
   NUM_POS_ARGS["${name}"]="${num_args}"
-  POS_REQUIRED["${name}"]="${required}"
+  REQUIRED["${name}"]="${required}"
   POS_ORDER+=("${name}")
 
-  POS_PARSED["${name}"]=''
+  ARG_VALUES["${name}"]=''
 }
 
 
@@ -144,8 +138,8 @@ consume_flag() {
     (( num_args-- ))
   done
 
-  VALUES["${name}"]="${args[@]}"
-  (( COUNTS["${name}"] += 1 ))
+  ARG_VALUES["${name}"]="${args[@]}"
+  (( OPT_COUNTS["${name}"] += 1 ))
 }
 
 consume_pos() {
@@ -164,10 +158,10 @@ consume_pos() {
       return 1
     fi
 
-    POS_PARSED["${pos}"]="${params[*]}"
+    ARG_VALUES["${pos}"]="${params[*]}"
 
-    local required="${POS_REQUIRED[${pos}]}"
-    if [[ "${required}" == 'true' && -z "${POS_PARSED[${pos}]}" ]]; then
+    local required="${REQUIRED[${pos}]}"
+    if [[ "${required}" == 'true' && -z "${ARG_VALUES[${pos}]}" ]]; then
       missing_required_pos "${pos}"
       return 1
     fi
@@ -185,7 +179,7 @@ validate_opts() {
   # Required
   for flag in "${!REQUIRED[@]}"; do
     local required="${REQUIRED[${flag}]}"
-    local value="${VALUES[${flag}]}"
+    local value="${ARG_VALUES[${flag}]}"
     if [[ "${required}" == 'true' && -z "${value}" ]]; then
       missing_required "${OPTS[${flag}]}"
       return 1
@@ -195,7 +189,7 @@ validate_opts() {
   # Instances
   for flag in "${!INSTANCES[@]}"; do
     local max_instances="${INSTANCES[${flag}]}"
-    local count="${COUNTS[${flag}]}"
+    local count="${OPT_COUNTS[${flag}]}"
     if (( count > max_instances )); then
       too_many_instances "${OPTS[${flag}]}" "${count}" "${max_instances}"
       return 1
@@ -203,11 +197,11 @@ validate_opts() {
   done
 
   # Defaults
-  for flag in "${!VALUES[@]}"; do
-    local value="${VALUES[${flag}]}"
+  for flag in "${!ARG_VALUES[@]}"; do
+    local value="${ARG_VALUES[${flag}]}"
     local default="${DEFAULTS[${flag}]}"
     if [[ -z "${value}" ]]; then
-      VALUES["${flag}"]="${default}"
+      ARG_VALUES["${flag}"]="${default}"
     fi
   done
 }
@@ -258,13 +252,16 @@ parse() {
 # Option arguments
 declare -A OPTS
 declare -A NUM_OPT_ARGS
+declare -A NUM_POS_ARGS
 declare -A REQUIRED
 declare -A DEFAULTS
 declare -A STORE
 declare -A INSTANCES
+declare -a POS_ORDER
 
-declare -A VALUES
-declare -A COUNTS
+declare -A ARG_VALUES
+declare -A OPT_COUNTS
+
 
 #              name            opts             num_args      required      default    store
 register_opt   'FLAG'          '-f|--flag'      0             'false'       'false'    'true'
@@ -281,14 +278,6 @@ register_opt_value 'SINGLE_FLAG' INSTANCES  1
 register_opt 'MULTI_ARG' '-m|--multi'
 register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
 register_opt_value 'MULTI_ARG' INSTANCES  2
-
-
-# Positional arguments
-declare -A NUM_POS_ARGS
-declare -A POS_REQUIRED
-declare -a POS_ORDER
-
-declare -A POS_PARSED
 
 #             name                num_args      required
 register_pos  'SINGLE_POS'        1             'true'
