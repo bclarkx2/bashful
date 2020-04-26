@@ -1,20 +1,13 @@
 #!/usr/bin/env bash 
 
+# Source flag-parsing library
 bashful_dir="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE}")")")"
 source "${bashful_dir}/flag-parsing"
 
-print_arg() {
-  printf '%s\n%s\n' 'PRINTING' "$@"
-}
-
-save_to_global() {
-  local -r name="$1"
-  local -r val="$3"
-  echo "saving to global: $@" 
-  
-  printf -v "${name}" "${val}"
-}
-
+# Define function that defines and parses args
+# This is useful to encapsulate the parser state
+# and prevent it from dirtying the namespace of
+# the rest of your script
 get_args() {
 
   bashful::begin
@@ -65,7 +58,22 @@ get_args() {
   bashful::end
 }
 
-get_args "$@"
+# Define a series of parse callbacks
+print_arg() {
+  printf '%s\n%s\n' 'PRINTING' "$@"
+}
 
+save_to_global() {
+  local -r name="$1"
+  local -r val="$3"
+  echo "saving to global: $@" 
+  
+  printf -v "${name}" "${val}"
+}
+
+# Call the function to define and parse the args
+get_args PARSED "$@"
+
+# Report on the results
 echo "INC_ARG: ${INC_ARG}"
 
