@@ -1,5 +1,6 @@
 #!/bin/bash
 
+## Tools
 debug() {
   local -n arr="$1"
   printf '\n%s\n' "DEBUG: ${!arr}"
@@ -16,9 +17,24 @@ print_all() {
   done
 }
 
-# post-parse
 print_arg() {
   printf '%s\n%s\n' 'Printing an arg!' "$@"
+}
+
+copy_array() {
+  local -n in="$1"
+  local -n out="$2"
+
+  # Clear existing out array
+  for key in "${!out[@]}"; do
+    unset out["${key}"]
+  done
+
+  # Copy each key-value pair from in to out
+  for key in "${!in[@]}"; do 
+    local val="${in[${key}]}"
+    out["${key}"]="${val}"
+  done
 }
 
 
@@ -98,7 +114,6 @@ register_opt() {
 
   ARG_VALUES["${name}"]=''
   OPT_COUNTS["${name}"]=0
-
 }
 
 register_opt_value() {
@@ -253,6 +268,7 @@ post_parse() {
 
 # Main
 parse() {
+  local -n OUTPUT="$1" ; shift 1
   local -a POS_RAW
 
   while (( "$#" )); do 
@@ -294,6 +310,8 @@ parse() {
   consume_pos "${POS_RAW[@]}" || return 1
   validate_opts || return 1
   post_parse
+
+  copy_array ARG_VALUES OUTPUT
 }
 
 # Declarations

@@ -53,7 +53,6 @@ get_args() {
   register_pos  'INF_POS'           -1            'false'     'abc'
   
   parse "$@" || exit 1
-  print_all
   
   bashful::end
 }
@@ -72,8 +71,15 @@ save_to_global() {
 }
 
 # Call the function to define and parse the args
+declare -A PARSED
 get_args PARSED "$@"
 
 # Report on the results
+printf '\n%s\n' 'Contents of PARSED:'
+for flag in "${!PARSED[@]}"; do
+  printf ' [%s]=%s\n' "${flag}" "${PARSED[${flag}]}"
+done
+
+echo
 echo "INC_ARG: ${INC_ARG}"
 
