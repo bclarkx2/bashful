@@ -98,6 +98,7 @@ register_opt() {
 
   ARG_VALUES["${name}"]=''
   OPT_COUNTS["${name}"]=0
+
 }
 
 register_opt_value() {
@@ -253,7 +254,7 @@ post_parse() {
 # Main
 parse() {
   local -a POS_RAW
-  
+
   while (( "$#" )); do 
     # Registered options
     for flag in "${!OPTS[@]}"; do
@@ -295,61 +296,18 @@ parse() {
   post_parse
 }
 
-# Option arguments
-declare -A OPTS
-declare -A NUM_OPT_ARGS
-declare -A NUM_POS_ARGS
-declare -A REQUIRED
-declare -A DEFAULTS
-declare -A ACTIONS
-declare -A STORE
-declare -A INSTANCES
-declare -A POST_PARSE
-declare -a POS_ORDER
+# Declarations
+declare -Ag OPTS
+declare -Ag NUM_OPT_ARGS
+declare -Ag NUM_POS_ARGS
+declare -Ag REQUIRED
+declare -Ag DEFAULTS
+declare -Ag ACTIONS
+declare -Ag STORE
+declare -Ag INSTANCES
+declare -Ag POST_PARSE
+declare -ag POS_ORDER
 
-declare -A ARG_VALUES
-declare -A OPT_COUNTS
-
-
-#              name            opts             num_args      required      default    store
-register_opt   'DEFAULT_FLAG'  '-d|--default'   0             'false'       'DEFAULT'  'NEW'
-
-register_opt 'FLAG' '-f|--flag'
-register_opt_value 'FLAG' DEFAULT   'false'
-register_opt_value 'FLAG' STORE     'true'
-
-register_opt 'FLAG_ARG' '-a|--arg'
-register_opt_value 'FLAG_ARG' NUM_OPT_ARGS  1
-register_opt_value 'FLAG_ARG' REQUIRED      'true'
-register_opt_value 'FLAG_ARG' POST_PARSE    'print_arg'
-
-register_opt 'SINGLE_FLAG' '-s|--single'
-register_opt_value 'SINGLE_FLAG' STORE      'SET'
-register_opt_value 'SINGLE_FLAG' INSTANCES  1
-register_opt_value 'SINGLE_FLAG' POST_PARSE 'print_arg'
-
-register_opt 'MULTI_ARG' '-m|--multi'
-register_opt_value 'MULTI_ARG' NUM_OPT_ARGS   1
-register_opt_value 'MULTI_ARG' INSTANCES    2
-
-register_opt 'LIST_ARG' '-l|--list'
-register_opt_value 'LIST_ARG' NUM_OPT_ARGS  1
-register_opt_value 'LIST_ARG' ACTIONS       'list'
-
-register_opt 'STORE_LIST' '-sl|--store-list'
-register_opt_value 'STORE_LIST' ACTIONS     'list'
-register_opt_value 'STORE_LIST' STORE       'VAL'
-
-register_opt 'INC_ARG' '-i|--i'
-register_opt_value 'INC_ARG' ACTIONS        'increment'
-register_opt_value 'INC_ARG' STORE          2
-register_opt_value 'INC_ARG' INSTANCES      3
-
-#             name                num_args      required    default
-register_pos  'SINGLE_POS'        1             'true'      ''
-register_pos  'MULTI_POS'         2             'true'      ''
-register_pos  'INF_POS'           -1            'false'     'abc'
-
-parse "$@" || exit 1
-print_all
+declare -Ag ARG_VALUES
+declare -Ag OPT_COUNTS
 
