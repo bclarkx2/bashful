@@ -10,8 +10,8 @@ source "${bashful_dir}/flag-parsing"
 # the rest of your script
 get_args() {
 
-  bashful::begin
-  
+  bashful::begin || return 1
+
   register_opt_bool 'FLAG' '-f|--flag'
   register_opt_with_arg 'FLAG_ARG' '-a|--arg'
   register_opt_count 'COUNT_ARG' '-c|--count'
@@ -45,7 +45,7 @@ get_args() {
   
   register_opt_from_line 'STORE_LIST' '-sl|--store-list' '
     [ACTION]=list
-    [STORE]=VAL
+    [STORE]=liz
   '
   
   #             name                num_args      required    default
@@ -54,13 +54,13 @@ get_args() {
   register_pos  'INF_POS'           -1            'false'     'abc'
   
   parse "$@" || exit 1
-  
-  bashful::end
+ 
+  bashful::end || return 1
 }
 
 # Call the function to define and parse the args
 declare -A PARSED
-get_args PARSED "$@"
+get_args PARSED "$@" || exit 1
 
 # Report on the results
 printf '\n%s\n' 'Contents of PARSED:'

@@ -1,11 +1,27 @@
 #!/bin/bash
 
 bashful::begin() {
+
+  if [[ "${BASHFUL_FLAG_PARSING_IMPORTED}" == 'true' ]]; then
+    echo "Error: bashful flag parser already initiated" >&2
+    return 1
+  else
+    BASHFUL_FLAG_PARSING_IMPORTED='true'
+  fi
+
   local dir="$(dirname "${BASH_SOURCE}")"
   source "${dir}/flag-parsing-internal/flag-parsing-internal"
 }
 
 bashful::end() {
+
+  if [[ "${BASHFUL_FLAG_PARSING_IMPORTED}" != 'true' ]]; then
+    echo "Error: no bashful flag parser session in progress" >&2
+    return 1
+  else
+    BASHFUL_FLAG_PARSING_IMPORTED='false'
+  fi
+
   # Variables
   unset -v OPTS
   unset -v NUM_OPT_ARGS
