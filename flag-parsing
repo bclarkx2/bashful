@@ -1,313 +1,43 @@
 #!/bin/bash
 
-debug() {
-  local -n arr="$1"
-  printf '\n%s\n' "DEBUG: ${!arr}"
-  for flag in "${!arr[@]}"; do
-    printf ' [%s]=%s\n' "${flag}" "${arr[${flag}]}"
-  done
+bashful::begin() {
+  local dir="$(dirname "${BASH_SOURCE}")"
+  source "${dir}/flag-parsing-internal/flag-parsing-internal"
 }
 
-print_all() {
-  echo
-  echo "Args:"
-  for flag in "${!ARG_VALUES[@]}"; do
-    printf ' [%s]=%s\n' "${flag}" "${ARG_VALUES[${flag}]}"
-  done
-}
-
-# post-parse
-print_arg() {
-  printf '%s\n%s\n' 'Printing an arg!' "$@"
-}
-
-
-## Flag parsing
-
-# Err messages
-missing_args() {
-  local -r _name="$1"
-  local -r _req="$2"
-  local -r _prov="$3"
-  printf '%s\n%s\n' \
-    "Error: '${_name}' has required arguments: ${_req}" \
-    "Provided: ${_prov}" \
-    >&2
-}
-
-missing_required() {
-  local -r _name="$1"
-  printf '%s\n' "Error: missing required option: ${_name}" >&2
-}
-
-too_many_instances() {
-  local -r _name="$1"
-  local -r _count="$2"
-  local -r _max="$3"
-  printf '%s\n%s\n%s\n' \
-    "Error: '${_name}' has too many instances." \
-    "Given: ${_count}" \
-    "Max: ${_max}" \
-    >&2
-}
-
-missing_pos_args() {
-  local -r _name="$1"
-  local -r _num="$2"
-  local -r _actual="$3"
-  printf '%s\n%s\n%s\n' \
-    "Error: '${_name}' is missing positional arguments." \
-    "Given: ${_actual}" \
-    "Required: ${_num}" \
-    >&2
-}
-
-too_many_pos_args() {
-  printf 'Error: too many positional arguments provided\n' >&2
-}
-
-missing_required_pos() {
-  local -r _name="$1"
-  printf '%s\n' "Error: missing required positional argument '${_name}'" >&2
-}
-
-unsupported_action() {
-  local -r _name="$1"
-  local -r _action="$2"
-  printf '%s\n' "Error: '${_name}' was called with an unsupported action: ${_action}" >&2
-}
-
-# Registration
-register_opt() {
-  local -r name="$1"
-  local -r opts="$2"
-  local -r num_args="${3:-0}"
-  local -r required="${4:-false}"
-  local -r default="$5"
-  local -r store="$6"
-  local -r instances="${7:-0}"
-  local -r action="${8:-store}"
-
-  OPTS["${name}"]="${opts}"
-  NUM_OPT_ARGS["${name}"]="${num_args}"
-  REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
-  STORE["${name}"]="${store}"
-  INSTANCES["${name}"]="${instances}"
-  ACTIONS["${name}"]="${action}"
-
-  ARG_VALUES["${name}"]=''
-  OPT_COUNTS["${name}"]=0
-
-}
-
-register_opt_value() {
-  local -r name="$1"
-  local -n attr="$2"
-  local -r val="$3"
-
-  attr["${name}"]="${val}"
-}
-
-register_pos() {
-  local -r name="$1"
-  local -r num_args="${2:-0}"
-  local -r required="${3:-'true'}"
-  local -r default="${4}"
-
-  NUM_POS_ARGS["${name}"]="${num_args}"
-  REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
-  POS_ORDER+=("${name}")
-
-  ARG_VALUES["${name}"]=''
-}
-
-
-# Processing
-consume_flag() {
-  local -r name="$1" ; shift 2
+bashful::end() {
+  # Variables
+  unset -v OPTS
+  unset -v NUM_OPT_ARGS
+  unset -v NUM_POS_ARGS
+  unset -v REQUIRED
+  unset -v DEFAULTS
+  unset -v ACTIONS
+  unset -v STORE
+  unset -v INSTANCES
+  unset -v POST_PARSE
+  unset -v POS_ORDER
   
-  local num_args="${NUM_OPT_ARGS[${name}]}"
+  unset -v ARG_VALUES
+  unset -v OPT_COUNTS
 
-  local -a args=()
+  # Private functions
+  unset -f debug
+  unset -f print_all
+  unset -f print_arg
 
-  if (( num_args == 0 )); then
-    args+=("${STORE[${name}]}")
-  fi
-  
-  while (( "$num_args" )); do
-    local arg="$1" ; shift 1
+  unset -f missing_args
+  unset -f missing_required
+  unset -f too_many_instances
+  unset -f missing_pos_args
+  unset -f too_many_pos_args
+  unset -f missing_required_pos
 
-    if [[ -z "${arg}" ]]; then
-      missing_args "${OPTS[${name}]}" "${NUM_OPT_ARGS[$name]}" "${args[*]}"
-      return 1
-    fi
+  unset -f consume_flag
+  unset -f consume_pos
 
-    for flag in "${OPTS[@]}"; do
-      if [[ "${arg}" =~ ${flag} ]]; then
-        missing_args "${OPTS[${name}]}" "${NUM_OPT_ARGS[$name]}" "${args[*]}"
-        return 1
-      fi
-    done
+  unset -f validate_opts
 
-    args+=("${arg}")
-    (( num_args-- ))
-  done
-
-  local -r action="${ACTIONS[${name}]}"
-  case "${action}" in
-    store)
-      ARG_VALUES["${name}"]="${args[@]}"
-      ;;
-    list)
-      ARG_VALUES["${name}"]="${ARG_VALUES[${name}]} ${args[@]}"
-      ;;
-    increment)
-      (( ARG_VALUES["${name}"] += "${args[0]}" ))
-      ;;
-    *)
-      unsupported_action "${name}" "${action}"
-      ;;
-  esac
-
-  (( OPT_COUNTS["${name}"] += 1 ))
+  unset -f post_parse
 }
-
-consume_pos() {
-  for pos in "${POS_ORDER[@]}"; do
-    local num_pos_args="${NUM_POS_ARGS[${pos}]}"
-
-    local params=()
-    while (( num_pos_args != 0 && $# )); do
-      params+=("$1")
-      shift 1
-      (( num_pos_args-- ))
-    done
-
-    if (( num_pos_args > 0 )); then
-      missing_pos_args "${pos}" "${num_pos_args}" "${params[*]}"
-      return 1
-    fi
-
-    ARG_VALUES["${pos}"]="${params[*]}"
-
-    local required="${REQUIRED[${pos}]}"
-    if [[ "${required}" == 'true' && -z "${ARG_VALUES[${pos}]}" ]]; then
-      missing_required_pos "${pos}"
-      return 1
-    fi
-  done
-
-  if (( $# )); then
-    too_many_pos_args
-    return 1
-  fi
-}
-
-
-# Validation
-validate_opts() {
-  # Required
-  for flag in "${!REQUIRED[@]}"; do
-    local required="${REQUIRED[${flag}]}"
-    local value="${ARG_VALUES[${flag}]}"
-    if [[ "${required}" == 'true' && -z "${value}" ]]; then
-      missing_required "${OPTS[${flag}]}"
-      return 1
-    fi
-  done
-
-  # Instances
-  for flag in "${!INSTANCES[@]}"; do
-    local max_instances="${INSTANCES[${flag}]}"
-    local count="${OPT_COUNTS[${flag}]}"
-    if (( max_instances > 0 && count > max_instances )); then
-      too_many_instances "${OPTS[${flag}]}" "${count}" "${max_instances}"
-      return 1
-    fi
-  done
-
-  # Defaults
-  for flag in "${!ARG_VALUES[@]}"; do
-    local value="${ARG_VALUES[${flag}]}"
-    local default="${DEFAULTS[${flag}]}"
-    if [[ -z "${value}" ]]; then
-      ARG_VALUES["${flag}"]="${default}"
-    fi
-  done
-}
-
-
-# Post parse
-post_parse() {
-  # Post parse funcs
-  for flag in "${!POST_PARSE[@]}"; do
-    local callback="${POST_PARSE[${flag}]}"
-    local opts="${OPTS[${flag}]:-'--'}"
-    local val="${ARG_VALUES[${flag}]}"
-    "${callback}" "${flag}" "${opts}" "${val}"
-  done
-}
-
-
-# Main
-parse() {
-  local -a POS_RAW
-
-  while (( "$#" )); do 
-    # Registered options
-    for flag in "${!OPTS[@]}"; do
-      local opts="${OPTS[${flag}]}"
-      local num_args="${NUM_OPT_ARGS[${flag}]}"
- 
-      local regex="^(${opts})$"
-      if [[ "$1" =~ $regex ]]; then
-        consume_flag "${flag}" "$@" || return 1
-        shift $(( num_args + 1 ))
-        continue 2
-      fi
-    done
-    
-    # Default options
-    case "$1" in
-      -h|--help)
-        usage
-        exit 0
-        ;;
-      --) # End argument parsing
-        shift
-        POS_RAW+=("$@")
-        break
-        ;;
-      -*|--*=) # unsupported flags
-        echo "Error: Unsupported flag $1" >&2
-        return 1
-        ;;
-      *) # preserve positional arguments
-        POS_RAW+=("$1")
-        shift
-        ;;
-    esac
-  done
-  
-  consume_pos "${POS_RAW[@]}" || return 1
-  validate_opts || return 1
-  post_parse
-}
-
-# Declarations
-declare -Ag OPTS
-declare -Ag NUM_OPT_ARGS
-declare -Ag NUM_POS_ARGS
-declare -Ag REQUIRED
-declare -Ag DEFAULTS
-declare -Ag ACTIONS
-declare -Ag STORE
-declare -Ag INSTANCES
-declare -Ag POST_PARSE
-declare -ag POS_ORDER
-
-declare -Ag ARG_VALUES
-declare -Ag OPT_COUNTS
 
