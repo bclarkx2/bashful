@@ -8,8 +8,8 @@ declare -Ag OPTS
 declare -Ag NUM_OPT_ARGS
 declare -Ag NUM_POS_ARGS
 declare -Ag REQUIRED
-declare -Ag DEFAULTS
-declare -Ag ACTIONS
+declare -Ag DEFAULT
+declare -Ag ACTION
 declare -Ag STORE
 declare -Ag INSTANCES
 declare -Ag POST_PARSE
@@ -75,7 +75,7 @@ parse() {
 #               for the parser
 ###############################################################################
 
-register_opt() {
+register_opt_base() {
   local -r name="$1"
   local -r opts="$2"
   local -r num_args="${3:-0}"
@@ -88,13 +88,37 @@ register_opt() {
   OPTS["${name}"]="${opts}"
   NUM_OPT_ARGS["${name}"]="${num_args}"
   REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
+  DEFAULT["${name}"]="${default}"
   STORE["${name}"]="${store}"
   INSTANCES["${name}"]="${instances}"
-  ACTIONS["${name}"]="${action}"
+  ACTION["${name}"]="${action}"
 
   ARG_VALUES["${name}"]=''
   OPT_COUNTS["${name}"]=0
+}
+
+register_opt_from_dict() {
+  local -r name="$1"
+  local -r opts="$2"
+  local -n _options="$3"
+
+  # Basic registration
+  register_opt_base "${name}" "${opts}"
+  
+  # Apply option overrides
+  for option in "${!_options[@]}"; do
+    local option_val="${_options[${option}]}"
+    printf -v "${option}"["${name}"] "${option_val}"
+  done
+}
+
+register_opt_from_line() {
+  local -r name="$1"
+  local -r opts="$2"
+  local -r option_str="$3"
+
+  eval local -A options=( "${option_str}" )
+  register_opt_from_dict "${name}" "${opts}" options
 }
 
 register_opt_value() {
@@ -105,6 +129,33 @@ register_opt_value() {
   attr["${name}"]="${val}"
 }
 
+register_opt_bool() {
+  local -r name="$1"
+  local -r opts="$2"
+  register_opt_from_line "${name}" "${opts}" '
+    [DEFAULT]=false
+    [STORE]=true
+  '
+}
+
+register_opt_with_arg() {
+  local -r name="$1"
+  local -r opts="$2"
+  register_opt_from_line "${name}" "${opts}" '
+    [NUM_OPT_ARGS]=1
+  '
+}
+
+register_opt_count() {
+  local -r name="$1"
+  local -r opts="$2"
+  register_opt_from_line "${name}" "${opts}" '
+    [DEFAULT]=0
+    [ACTION]=increment
+    [STORE]=1
+  '
+}
+
 register_pos() {
   local -r name="$1"
   local -r num_args="${2:-0}"
@@ -113,7 +164,7 @@ register_pos() {
 
   NUM_POS_ARGS["${name}"]="${num_args}"
   REQUIRED["${name}"]="${required}"
-  DEFAULTS["${name}"]="${default}"
+  DEFAULT["${name}"]="${default}"
   POS_ORDER+=("${name}")
 
   ARG_VALUES["${name}"]=''
@@ -162,7 +213,7 @@ consume_flag() {
     (( num_args-- ))
   done
 
-  local -r action="${ACTIONS[${name}]}"
+  local -r action="${ACTION[${name}]}"
   case "${action}" in
     store)
       ARG_VALUES["${name}"]="${args[@]}"
@@ -241,7 +292,7 @@ validate_opts() {
   # Defaults
   for flag in "${!ARG_VALUES[@]}"; do
     local value="${ARG_VALUES[${flag}]}"
-    local default="${DEFAULTS[${flag}]}"
+    local default="${DEFAULT[${flag}]}"
     if [[ -z "${value}" ]]; then
       ARG_VALUES["${flag}"]="${default}"
     fi

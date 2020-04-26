@@ -11,8 +11,8 @@ bashful::end() {
   unset -v NUM_OPT_ARGS
   unset -v NUM_POS_ARGS
   unset -v REQUIRED
-  unset -v DEFAULTS
-  unset -v ACTIONS
+  unset -v DEFAULT
+  unset -v ACTION
   unset -v STORE
   unset -v INSTANCES
   unset -v POST_PARSE
@@ -22,9 +22,23 @@ bashful::end() {
   unset -v OPT_COUNTS
 
   # Private functions
-  unset -f debug
-  unset -f print_all
-  unset -f print_arg
+  unset -f parse
+
+  unset -f register_opt_base
+  unset -f register_opt_from_dict
+  unset -f register_opt_from_line
+  unset -f register_opt_value
+  unset -f register_opt_bool_flag
+  unset -f register_opt_with_arg
+  unset -f register_opt_count
+  unset -f register_pos
+
+  unset -f consume_flag
+  unset -f consume_pos
+
+  unset -f validate_opts
+
+  unset -f post_parse
 
   unset -f missing_args
   unset -f missing_required
@@ -33,11 +47,20 @@ bashful::end() {
   unset -f too_many_pos_args
   unset -f missing_required_pos
 
-  unset -f consume_flag
-  unset -f consume_pos
+  unset -f debug
+  unset -f print_all
+  unset -f print_arg
+  unset -f copy_array
+}
 
-  unset -f validate_opts
+# Common post-parse callbacks
+bashful::print_arg() {
+  printf '%s\n%s\n' 'PRINTING' "$@"
+}
 
-  unset -f post_parse
+bashful::save_to_global() {
+  local -r name="$1"
+  local -r val="$3"
+  printf -v "${name}" "${val}"
 }
 
