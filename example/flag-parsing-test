@@ -52,7 +52,7 @@ get_args() {
   register_pos  'SINGLE_POS'        1             'true'      ''
   register_pos  'MULTI_POS'         2             'true'      ''
   register_pos  'INF_POS'           -1            'false'     'abc'
-  
+
   parse "$@" || exit 1
  
   bashful::end || return 1
